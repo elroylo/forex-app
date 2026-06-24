@@ -9,4 +9,4 @@ A forex notification app.
 - [x] Repository initialized on external SSD (`D:\forex-app`)
 - [ ] Project details / tech stack
 - [ ] Notification system
-- [ ] Automatic GitHub pushing
+- [x] Automatic GitHub pushing

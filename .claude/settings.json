@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/auto-push.sh\" 2>/dev/null || bash .claude/auto-push.sh 2>/dev/null || true",
+            "timeout": 60,
+            "statusMessage": "Auto-pushing forex-app to GitHub..."
+          }
+        ]
+      }
+    ]
+  }
+}
