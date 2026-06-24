@@ -1,0 +1,38 @@
+# --- Secrets / credentials (never commit these) ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+credentials.json
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Editors / IDEs ---
+.vscode/
+.idea/
+*.swp
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Node (if used) ---
+node_modules/
+dist/
+build/
+.npm/
+
+# --- Python (if used) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
