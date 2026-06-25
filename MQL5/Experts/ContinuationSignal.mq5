@@ -24,7 +24,7 @@
 //      "Algo Trading".
 //+------------------------------------------------------------------+
 #property copyright "forex-app"
-#property version   "0.20"
+#property version   "1.00"
 #property description "Trend-continuation signals (D1+H4 filter) with MT5 push, email, popup, sound & Telegram alerts."
 
 //==================== INPUTS ====================
