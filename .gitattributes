@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# MetaTrader compiled binaries
+*.ex5 binary
+*.ex4 binary

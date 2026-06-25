@@ -38,6 +38,9 @@ env/
 .ipynb_checkpoints/
 
 # --- MQL5 / MetaTrader build artifacts ---
-*.ex5
+# Ignore OUR compiled output, but keep third-party indicator .ex5 deps tracked
+# (e.g. MQL5/Indicators/SchaffTrendCycle.ex5, which has no source).
+/MQL5/Experts/*.ex5
+/MQL5/Scripts/*.ex5
 *.ex4
 *.log

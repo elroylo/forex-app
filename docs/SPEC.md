@@ -56,9 +56,19 @@ Signal Time: {yyyy.MM.dd HH:mm}
 ---
 
 ## Decisions (resolved)
-1. **Indicator access:** `iCustom()` against the user's free **MT5 Market** copies of the 3 custom indicators (`ATR_Adaptive_DoubleSmoothed`, `VQZL_v2.3`, `SchaffTrendCycle`). Inputs are known; **buffer indices default to 0 and get calibrated on first compile.** MA of RSI + ATR are reimplemented natively.
+1. **Indicator access:** `iCustom()` for all four custom indicators; `ATR(14)` via native `iATR`. The `.mq5` **source** for ATR-Adaptive, VQZL, and MA-of-RSI was provided, so input order + buffer indices are **confirmed** (table below); source files are bundled in `MQL5/Indicators/`. Only `SchaffTrendCycle` is compiled-only (value = buffer 0, single plot).
 2. **Timeframe rule:** **D1 + H4 aligned** (+ optional chart-TF baseline), all toggleable via inputs. (The page-1 "H1+H4" variant is still reachable by turning off the D1 filter.)
 3. **STC thresholds:** **25 / 75** oversold/overbought, 50 midline.
+
+### iCustom signatures (confirmed from source; STC from screenshot)
+| Indicator | iCustom name | Params (in order) | Value buf | Direction |
+|---|---|---|---|---|
+| ATR Adaptive | `ATR_Adaptive_DoubleSmoothed` | `double Period=25.0`, `Price=PRICE_CLOSE` | 0 | EMA slope (buf1 color 2=up/1=down) |
+| MA of RSI | `MA_of_RSI` | `int RSI=6`, `PRICE_CLOSE`, `int MA=3`, `MODE_SMMA` | 0 (buf1 = raw RSI) | line vs 50 |
+| VQZL v2.3 | `VQZL_v2.3` | `int Smooth=10`, `MODE_LWMA`, `double Filter=7.5` | 0 | value > 0 = bullish |
+| Schaff TC | `SchaffTrendCycle` | `int MAShort=21`, `int MALong=50`, `int Cycle=10` | 0 (assumed) | cross 25/75 & 50 |
+
+`MA_of_RSI` internally calls `Examples\RSI` (standard MT5) and uses a non-standard *windowed* SMMA — so it is read via `iCustom` (buffer 0) for an exact match rather than reimplemented.
 
 ## Architecture note — EA, not indicator
 Telegram needs `WebRequest()`, which MT5 forbids inside indicators (they run on the UI thread). So this is built as an **Expert Advisor** (`MQL5/Experts/ContinuationSignal.mq5`): same on-chart BUY/SELL arrows (drawn as objects, so history persists), closed-bar evaluation (non-repainting), and all alert channels including Telegram.

@@ -3,27 +3,29 @@
 //|                  Trend-continuation signal EA with multi-channel  |
 //|                  alerts (MT5 push, email, popup, sound, Telegram) |
 //+------------------------------------------------------------------+
-// DRAFT v0.1 - calibrate the iCustom names/buffer indices after the
-// first compile (see "CALIBRATION" notes below). Built as an EA (not
-// an indicator) because Telegram needs WebRequest(), which MT5 blocks
-// inside indicators.
+// v0.2 - iCustom signatures + buffer indices CONFIRMED from indicator
+// source (ATR_Adaptive, VQZL, MA_of_RSI). STC is compiled-only; its
+// value is buffer 0 (single plot) - verify with BufferProbe if needed.
 //
-// SETUP CHECKLIST (do these in MT5 once):
-//   1. Download the 3 Market indicators (free) so they exist locally:
-//        - ATR_Adaptive_DoubleSmoothed
-//        - VQZL_v2.3
-//        - SchaffTrendCycle
-//      Note their EXACT file path under MQL5\Indicators (Market items
-//      usually live in "Market\<Name>") and set the *Name inputs.
-//   2. Tools > Options > Expert Advisors:
-//        - "Allow WebRequest for listed URL" -> add: https://api.telegram.org
-//        - (Email tab) configure SMTP for email alerts
-//   3. Enable "Algo Trading" (toolbar) so OnTick + WebRequest run.
-//   4. For push: set your MetaQuotes ID in the mobile app + terminal.
+// Built as an EA (not an indicator) because Telegram needs WebRequest(),
+// which MT5 blocks inside indicators.
+//
+// INSTALL (in MT5 -> File -> Open Data Folder -> MQL5):
+//   1. Copy from this repo into MQL5\Indicators\ :
+//        ATR_Adaptive_DoubleSmoothed.mq5   (compile, F7)
+//        VQZL_v2.3.mq5                      (compile, F7)
+//        MA_of_RSI.mq5                      (compile, F7; needs Examples\RSI)
+//        SchaffTrendCycle.ex5              (already compiled)
+//   2. Copy ContinuationSignal.mq5 into MQL5\Experts\ and compile (F7).
+//   3. Tools > Options > Expert Advisors: tick "Allow WebRequest for
+//      listed URL" and add  https://api.telegram.org . Configure Email
+//      (SMTP) for email alerts; set MetaQuotes ID for push.
+//   4. Drag the EA onto the chart, fill Telegram token/chat id, enable
+//      "Algo Trading".
 //+------------------------------------------------------------------+
 #property copyright "forex-app"
-#property version   "0.10"
-#property description "Trend-continuation signals (D1+H4 filter) with MT5 push, email, popup, sound & Telegram alerts. DRAFT - calibrate iCustom buffers."
+#property version   "0.20"
+#property description "Trend-continuation signals (D1+H4 filter) with MT5 push, email, popup, sound & Telegram alerts."
 
 //==================== INPUTS ====================
 input group "=== Higher-timeframe trend filter ==="
@@ -34,38 +36,40 @@ input bool            InpUseTrendTF2   = true;       // Require TF#2 alignment
 input bool            InpUseChartTrend = true;       // Require chart-TF baseline too
 
 input group "=== ATR Adaptive Double Smoothed EMA (baseline) [iCustom] ==="
-input string InpAA_Name   = "Market\\ATR_Adaptive_DoubleSmoothed"; // exact path\name
-input int    InpAA_Period = 25;          // Period
-input int    InpAA_Price  = PRICE_CLOSE; // Price (ENUM_APPLIED_PRICE)
-input int    InpAA_Buffer = 0;           // value buffer index (CALIBRATE)
-input bool   InpAA_PriceVsLine = true;   // bullish only if price is on the right side of the line
+input string             InpAA_Name   = "ATR_Adaptive_DoubleSmoothed"; // indicator name
+input double             InpAA_Period = 25.0;          // Period (this indicator uses a DOUBLE)
+input ENUM_APPLIED_PRICE InpAA_Price  = PRICE_CLOSE;   // Price
+input int                InpAA_Buffer = 0;             // value buffer (0 = EMA value)
+input bool               InpAA_PriceVsLine = true;     // bullish only if price is on the right side of the line
 
-input group "=== MA of RSI (native) ==="
-input int                InpRSI_Period   = 6;          // RSI period
-input ENUM_APPLIED_PRICE InpRSI_Price    = PRICE_CLOSE;// RSI applied price
-input int                InpRSI_MAPeriod = 3;          // MA period
-input ENUM_MA_METHOD     InpRSI_MAMethod = MODE_SMMA;  // MA method (Smoothed)
+input group "=== MA of RSI (momentum) [iCustom] ==="
+input string             InpMARSI_Name   = "MA_of_RSI"; // indicator name
+input int                InpRSI_Period   = 6;          // RSI1: Period
+input ENUM_APPLIED_PRICE InpRSI_Price    = PRICE_CLOSE;// RSI1: Applied Price
+input int                InpRSI_MAPeriod = 3;          // MA Period
+input ENUM_MA_METHOD     InpRSI_MAMethod = MODE_SMMA;  // MA Method (Smoothed)
+input int                InpMARSI_Buffer = 0;          // value buffer (0 = MA of RSI)
 input double             InpRSI_Mid      = 50.0;       // midline
 
 input group "=== VQZL v2.3 (volatility/quality) [iCustom] ==="
-input string InpVQ_Name      = "Market\\VQZL_v2.3"; // exact path\name
-input int    InpVQ_SmoothPer = 10;                  // Price smoothing period
-input int    InpVQ_SmoothMet = MODE_LWMA;           // Price smoothing method (Linear weighted)
-input double InpVQ_FilterATR  = 7.5;                // Filter (% of ATR)
-input int    InpVQ_Buffer     = 0;                  // value buffer index (CALIBRATE)
-input double InpVQ_Zero        = 0.0;               // bullish if value > this (or rising)
+input string         InpVQ_Name      = "VQZL_v2.3"; // indicator name
+input int            InpVQ_SmoothPer = 10;          // Price smoothing period
+input ENUM_MA_METHOD InpVQ_SmoothMet = MODE_LWMA;   // Price smoothing method (Linear weighted)
+input double         InpVQ_FilterATR  = 7.5;        // Filter (% of ATR)
+input int            InpVQ_Buffer     = 0;          // value buffer (0 = VQZL value)
+input double         InpVQ_Zero        = 0.0;       // bullish if value > this (or rising)
 
 input group "=== Schaff Trend Cycle [iCustom] ==="
-input string InpSTC_Name   = "Market\\SchaffTrendCycle"; // exact path\name
+input string InpSTC_Name   = "SchaffTrendCycle"; // indicator name
 input int    InpSTC_MAShort = 21;   // MAShort
 input int    InpSTC_MALong  = 50;   // MALong
 input int    InpSTC_Cycle   = 10;   // Cycle
-input int    InpSTC_Buffer  = 0;    // value buffer index (CALIBRATE)
+input int    InpSTC_Buffer  = 0;    // value buffer (0 = STC value) - VERIFY if unsure
 input double InpSTC_Oversold   = 25.0; // oversold
 input double InpSTC_Overbought = 75.0; // overbought
 input double InpSTC_Mid          = 50.0; // midline
 
-input group "=== ATR volatility check (native) ==="
+input group "=== ATR volatility check (native iATR) ==="
 input int    InpATR_Period    = 14;    // ATR period
 input int    InpATR_Lookback  = 50;    // bars to average ATR
 input double InpATR_MinPctAvg  = 60.0; // skip if ATR < this % of its average
@@ -92,7 +96,7 @@ input string InpTgChatId      = "";    // Telegram chat id
 
 //==================== GLOBALS ====================
 int      hAA_TF1=INVALID_HANDLE, hAA_TF2=INVALID_HANDLE, hAA_Chart=INVALID_HANDLE;
-int      hVQ=INVALID_HANDLE, hSTC=INVALID_HANDLE, hRSI=INVALID_HANDLE, hATR=INVALID_HANDLE;
+int      hVQ=INVALID_HANDLE, hSTC=INVALID_HANDLE, hMARSI=INVALID_HANDLE, hATR=INVALID_HANDLE;
 datetime g_lastBarTime=0;
 datetime g_lastBuyTime=0, g_lastSellTime=0;
 bool     g_prevBuyAll=false, g_prevSellAll=false;
@@ -129,21 +133,6 @@ int TrendDirAt(const int handle,const ENUM_TIMEFRAMES tf,const datetime t)
    return(0);
 }
 
-//--- SMMA(MAPeriod) of RSI(Period) at 'shift' and 'shift+1' ---------
-bool GetRsiMa(const int shift,double &maNow,double &maPrev)
-{
-   const int W=250;                              // window for SMMA convergence
-   double r[];
-   if(CopyBuffer(hRSI,0,shift,W,r)!=W) return(false); // r[0]=oldest ... r[W-1]=at 'shift'
-   int p=InpRSI_MAPeriod; if(p<1) p=1;
-   // seed = SMA of first p
-   double seed=0; for(int i=0;i<p;i++) seed+=r[i]; seed/=p;
-   double smma=seed, prev=seed;
-   for(int i=p;i<W;i++){ prev=smma; smma=(smma*(p-1)+r[i])/p; }
-   maNow=smma; maPrev=prev;
-   return(IsValidNum(maNow) && IsValidNum(maPrev));
-}
-
 //--- ATR "not too low" check at 'shift' -----------------------------
 bool AtrOk(const int shift)
 {
@@ -158,12 +147,10 @@ bool AtrOk(const int shift)
 
 bool HandlesReady()
 {
-   int need=Bars(_Symbol,_Period)-2;
-   if(need>InpHistoryBars+10) need=InpHistoryBars+10;
    if(BarsCalculated(hAA_Chart)<2) return(false);
    if(BarsCalculated(hVQ)<2)       return(false);
    if(BarsCalculated(hSTC)<2)      return(false);
-   if(BarsCalculated(hRSI)<2)      return(false);
+   if(BarsCalculated(hMARSI)<2)    return(false);
    if(BarsCalculated(hATR)<2)      return(false);
    return(true);
 }
@@ -231,7 +218,7 @@ void ProcessBar(const int shift,const bool allowAlert)
    datetime tBar=iTime(_Symbol,_Period,shift);
    if(tBar==0) return;
 
-   // ---- trend gate ----
+   // ---- trend gate (ATR-Adaptive EMA direction) ----
    int t1 = InpUseTrendTF1   ? TrendDirAt(hAA_TF1 ,InpTrendTF1,tBar) : 0;
    int t2 = InpUseTrendTF2   ? TrendDirAt(hAA_TF2 ,InpTrendTF2,tBar) : 0;
    int tc = InpUseChartTrend ? TrendDirAt(hAA_Chart,(ENUM_TIMEFRAMES)_Period,tBar) : 0;
@@ -239,13 +226,14 @@ void ProcessBar(const int shift,const bool allowAlert)
    bool trendBuy  = (!InpUseTrendTF1||t1==1) && (!InpUseTrendTF2||t2==1) && (!InpUseChartTrend||tc==1);
    bool trendSell = (!InpUseTrendTF1||t1==-1)&& (!InpUseTrendTF2||t2==-1)&& (!InpUseChartTrend||tc==-1);
 
-   // ---- momentum: MA of RSI ----
-   double maNow,maPrev;
-   if(!GetRsiMa(shift,maNow,maPrev)) return;
+   // ---- momentum: MA of RSI (buffer 0) ----
+   double maNow =Val(hMARSI,InpMARSI_Buffer,shift);
+   double maPrev=Val(hMARSI,InpMARSI_Buffer,shift+1);
+   if(!IsValidNum(maNow)||!IsValidNum(maPrev)) return;
    bool rsiBuy  = (maNow>InpRSI_Mid) || (maNow>maPrev);
    bool rsiSell = (maNow<InpRSI_Mid) || (maNow<maPrev);
 
-   // ---- confirmation: VQZL ----
+   // ---- confirmation: VQZL (value > 0 = bullish, per source) ----
    double vq1=Val(hVQ,InpVQ_Buffer,shift), vq2=Val(hVQ,InpVQ_Buffer,shift+1);
    if(!IsValidNum(vq1)||!IsValidNum(vq2)) return;
    bool vqBuy  = (vq1>InpVQ_Zero) || (vq1>vq2);
@@ -279,8 +267,8 @@ void ProcessBar(const int shift,const bool allowAlert)
       DrawArrow(true,tBar,lo-off);
       g_lastBuyTime=tBar;
       if(allowAlert){
-         string sum=StringFormat("%s Trend: %s\n%s Trend: %s\nMA of RSI: Confirmed\nVQZL: Bullish\nSTC: Cross Up\nATR: Volatility Confirmed",
-                     TFToStr(InpTrendTF1),"Bullish",TFToStr(InpTrendTF2),"Bullish");
+         string sum=StringFormat("%s Trend: Bullish\n%s Trend: Bullish\nMA of RSI: Confirmed\nVQZL: Bullish\nSTC: Cross Up\nATR: Volatility Confirmed",
+                     TFToStr(InpTrendTF1),TFToStr(InpTrendTF2));
          SendAllAlerts(true,iClose(_Symbol,_Period,shift),tBar,sum);
       }
    }
@@ -291,8 +279,8 @@ void ProcessBar(const int shift,const bool allowAlert)
       DrawArrow(false,tBar,hi+off);
       g_lastSellTime=tBar;
       if(allowAlert){
-         string sum=StringFormat("%s Trend: %s\n%s Trend: %s\nMA of RSI: Confirmed\nVQZL: Bearish\nSTC: Cross Down\nATR: Volatility Confirmed",
-                     TFToStr(InpTrendTF1),"Bearish",TFToStr(InpTrendTF2),"Bearish");
+         string sum=StringFormat("%s Trend: Bearish\n%s Trend: Bearish\nMA of RSI: Confirmed\nVQZL: Bearish\nSTC: Cross Down\nATR: Volatility Confirmed",
+                     TFToStr(InpTrendTF1),TFToStr(InpTrendTF2));
          SendAllAlerts(false,iClose(_Symbol,_Period,shift),tBar,sum);
       }
    }
@@ -312,18 +300,18 @@ void DrawHistory()
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   hRSI = iRSI(_Symbol,_Period,InpRSI_Period,InpRSI_Price);
-   hATR = iATR(_Symbol,_Period,InpATR_Period);
+   hATR      = iATR(_Symbol,_Period,InpATR_Period);
    hAA_Chart = iCustom(_Symbol,_Period,    InpAA_Name,InpAA_Period,InpAA_Price);
    hAA_TF1   = iCustom(_Symbol,InpTrendTF1,InpAA_Name,InpAA_Period,InpAA_Price);
    hAA_TF2   = iCustom(_Symbol,InpTrendTF2,InpAA_Name,InpAA_Period,InpAA_Price);
+   hMARSI    = iCustom(_Symbol,_Period,InpMARSI_Name,InpRSI_Period,InpRSI_Price,InpRSI_MAPeriod,InpRSI_MAMethod);
    hVQ       = iCustom(_Symbol,_Period,InpVQ_Name ,InpVQ_SmoothPer,InpVQ_SmoothMet,InpVQ_FilterATR);
    hSTC      = iCustom(_Symbol,_Period,InpSTC_Name,InpSTC_MAShort,InpSTC_MALong,InpSTC_Cycle);
 
-   if(hRSI==INVALID_HANDLE || hATR==INVALID_HANDLE || hAA_Chart==INVALID_HANDLE ||
-      hAA_TF1==INVALID_HANDLE || hAA_TF2==INVALID_HANDLE || hVQ==INVALID_HANDLE || hSTC==INVALID_HANDLE)
+   if(hATR==INVALID_HANDLE || hAA_Chart==INVALID_HANDLE || hAA_TF1==INVALID_HANDLE ||
+      hAA_TF2==INVALID_HANDLE || hMARSI==INVALID_HANDLE || hVQ==INVALID_HANDLE || hSTC==INVALID_HANDLE)
    {
-      Print("Failed to create one or more indicator handles. Check the iCustom *Name inputs (exact Market path).");
+      Print("Failed to create one or more indicator handles. Check the iCustom *Name inputs (the indicators must be compiled and present in MQL5\\Indicators).");
       return(INIT_FAILED);
    }
    g_lastBarTime=0; g_historyDone=false;
