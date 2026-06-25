@@ -50,8 +50,12 @@ VQZL: {Bullish|Bearish}
 STC: {Cross Up|Cross Down}
 ATR: Volatility Confirmed
 Entry Price: {price}
+Stop Loss: {price}     (ATR x InpATR_SL_Mult; omit via InpShowSLTP)
+Take Profit: {price}   (SL distance x InpRiskReward)
 Signal Time: {yyyy.MM.dd HH:mm}
 ```
+
+**Trade management:** ATR(14) drives a suggested SL/TP in the alert — `SL = ATR x InpATR_SL_Mult` (default 1.5), `TP = SL distance x InpRiskReward` (default 2.0). Suggestions only; the EA does not place orders.
 
 ---
 

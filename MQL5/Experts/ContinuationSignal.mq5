@@ -24,7 +24,7 @@
 //      "Algo Trading".
 //+------------------------------------------------------------------+
 #property copyright "forex-app"
-#property version   "1.00"
+#property version   "1.10"
 #property description "Trend-continuation signals (D1+H4 filter) with MT5 push, email, popup, sound & Telegram alerts."
 
 //==================== INPUTS ====================
@@ -83,6 +83,11 @@ input bool  InpDrawHistory  = true;     // draw past signals on attach
 input int   InpHistoryBars  = 600;      // how many bars of history to scan
 input color InpBuyColor     = clrLime;  // buy arrow color
 input color InpSellColor    = clrRed;   // sell arrow color
+
+input group "=== Trade management (ATR-based SL/TP in alerts) ==="
+input bool   InpShowSLTP    = true;  // include suggested SL/TP in alert text
+input double InpATR_SL_Mult = 1.5;   // Stop Loss distance = ATR x this
+input double InpRiskReward  = 2.0;   // Take Profit distance = SL distance x this
 
 input group "=== Alerts ==="
 input bool   InpAlertPush     = true;  // MT5 push notification
@@ -196,12 +201,13 @@ void SendTelegram(const string text)
    else if(code!=200) PrintFormat("Telegram HTTP %d: %s",code,CharArrayToString(result));
 }
 
-void SendAllAlerts(const bool isBuy,const double price,const datetime t,const string summary)
+void SendAllAlerts(const bool isBuy,const double price,const double sl,const double tp,const datetime t,const string summary)
 {
    string dir=isBuy?"BUY":"SELL";
    string head=dir+" Signal - "+_Symbol+" ("+TFToStr((ENUM_TIMEFRAMES)_Period)+")";
+   string sltp=InpShowSLTP ? "\nStop Loss: "+DoubleToString(sl,_Digits)+"\nTake Profit: "+DoubleToString(tp,_Digits) : "";
    string msg =head+"\n"+summary+
-               "\nEntry Price: "+DoubleToString(price,_Digits)+
+               "\nEntry Price: "+DoubleToString(price,_Digits)+sltp+
                "\nSignal Time: "+TimeToString(t,TIME_DATE|TIME_MINUTES);
    if(InpAlertPopup)    Alert(msg);
    if(InpAlertSound)    PlaySound(InpSoundFile);
@@ -263,25 +269,29 @@ void ProcessBar(const int shift,const bool allowAlert)
    if(buyAll && buyFresh && buyCool)
    {
       double atrv=Val(hATR,0,shift); double off=IsValidNum(atrv)?atrv*0.5:10*_Point;
-      double lo=iLow(_Symbol,_Period,shift);
-      DrawArrow(true,tBar,lo-off);
+      double sld=IsValidNum(atrv)?atrv*InpATR_SL_Mult:0;
+      double entry=iClose(_Symbol,_Period,shift);
+      double sl=entry-sld, tp=entry+sld*InpRiskReward;
+      DrawArrow(true,tBar,iLow(_Symbol,_Period,shift)-off);
       g_lastBuyTime=tBar;
       if(allowAlert){
          string sum=StringFormat("%s Trend: Bullish\n%s Trend: Bullish\nMA of RSI: Confirmed\nVQZL: Bullish\nSTC: Cross Up\nATR: Volatility Confirmed",
                      TFToStr(InpTrendTF1),TFToStr(InpTrendTF2));
-         SendAllAlerts(true,iClose(_Symbol,_Period,shift),tBar,sum);
+         SendAllAlerts(true,entry,sl,tp,tBar,sum);
       }
    }
    else if(sellAll && sellFresh && sellCool)
    {
       double atrv=Val(hATR,0,shift); double off=IsValidNum(atrv)?atrv*0.5:10*_Point;
-      double hi=iHigh(_Symbol,_Period,shift);
-      DrawArrow(false,tBar,hi+off);
+      double sld=IsValidNum(atrv)?atrv*InpATR_SL_Mult:0;
+      double entry=iClose(_Symbol,_Period,shift);
+      double sl=entry+sld, tp=entry-sld*InpRiskReward;
+      DrawArrow(false,tBar,iHigh(_Symbol,_Period,shift)+off);
       g_lastSellTime=tBar;
       if(allowAlert){
          string sum=StringFormat("%s Trend: Bearish\n%s Trend: Bearish\nMA of RSI: Confirmed\nVQZL: Bearish\nSTC: Cross Down\nATR: Volatility Confirmed",
                      TFToStr(InpTrendTF1),TFToStr(InpTrendTF2));
-         SendAllAlerts(false,iClose(_Symbol,_Period,shift),tBar,sum);
+         SendAllAlerts(false,entry,sl,tp,tBar,sum);
       }
    }
 }
